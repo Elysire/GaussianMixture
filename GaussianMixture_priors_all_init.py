@@ -104,15 +104,16 @@ def getParamsFromDatas(df_corrected, genotypes): # Get weigths for each genotype
 		wgt = nbGeno/len(df) #count genotype i (AA or AB or BB) normalize with len
 		wgts.append(wgt)
 		#### !!!!!!!!!!!  choose "Log Ratio" or "CorrectedLogRatio"
-		#meanLog = (df[df.Forced_Call==i].mean()["Log Ratio"])
-		meanLog = (df[df.Forced_Call==i].mean()["CorrectedLogRatio"]) #mean of logRatio for genotype i
+		meanLog = (df[df.Forced_Call==i].mean()["Log Ratio"])
+		#meanLog = (df[df.Forced_Call==i].mean()["CorrectedLogRatio"]) #mean of logRatio for genotype i
 		meansCouple.append(meanLog)
 		#### !!!!!!!!!!!  choose "Strength" or "CorrectedStrength"
-		#meanStrength = (df[df.Forced_Call==i].mean()["Strength"])
-		meanStrength = (df[df.Forced_Call==i].mean()["CorrectedStrength"]) #mean of Strength for genotype i
+		meanStrength = (df[df.Forced_Call==i].mean()["Strength"])
+		#meanStrength = (df[df.Forced_Call==i].mean()["CorrectedStrength"]) #mean of Strength for genotype i
 		meansCouple.append(meanStrength)
 		means.append(meansCouple)
-		pvar=np.var(df["CorrectedStrength"])
+		pvar=np.var(df["Strength"])
+		#pvar=np.var(df["CorrectedStrength"])
 	wgts = np.asarray(wgts)
 	means_array = np.asarray(means)
 	return wgts, means_array, countGeno, pvar
@@ -227,8 +228,8 @@ def plot_results(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,m
 
 ############### GAUSSIAN MIXTURE #############
 def GaussianMixture(df,wgts,means,genotypes,name_snp,index_ADN_103,maf,priors,pvar): # do the GM with EM algorithm and output results 
-	#datas = df[['Log Ratio','Strength']].as_matrix()
-	datas = df[['CorrectedLogRatio','CorrectedStrength']].as_matrix()
+	datas = df[['Log Ratio','Strength']].as_matrix()
+	#datas = df[['CorrectedLogRatio','CorrectedStrength']].as_matrix()
 	precisions = np.diag([pvar]*2)
 	maf = float(maf)
 	freqBB = maf**2
@@ -236,7 +237,7 @@ def GaussianMixture(df,wgts,means,genotypes,name_snp,index_ADN_103,maf,priors,pv
 	freqAA = (1-maf)**2
 	weigths_theo = np.asarray([freqAA,freqAB,freqBB])
 	print(weigths_theo)
-	gm = mixture.GaussianMixture(n_components=3, covariance_type="tied",weights_init=weigths_theo,means_init=priors,precisions_init=precisions,random_state=0, max_iter=200, verbose=0, warm_start=False).fit(datas)
+	gm = mixture.GaussianMixture(n_components=3, covariance_type="tied",weights_init=weigths_theo,means_init=means,precisions_init=precisions,random_state=0, max_iter=200, verbose=0, warm_start=False).fit(datas)
 	
 	resultatsGM = gm.predict(datas)
 	print(resultatsGM)
@@ -329,7 +330,7 @@ def hardyWeinberg(N,effectifs,maf): # return a chi2
 	theo_eff_BB = N * (maf**2)
 	theo_eff_AB = 2 * N * maf * (1 - maf)
 	theo_eff_AA = N * ((1-maf)**2)
-	theo_effectifs = [theo_eff_BB, theo_eff_AB, theo_eff_AA]
+	theo_effectifs = [theo_eff_AA, theo_eff_AB, theo_eff_BB]
 	pval = (scipy.stats.chisquare(effectifs, f_exp=theo_effectifs)[1])
 	return pval
 def desequilibreLiaison(df,wgts): # INCOMPLETE -> return DL but not sure of what it is 
@@ -443,13 +444,13 @@ def main():
 
 		df_snp = degPlatesFromSNP(AllDatas,snp)
 		df_corrected = correct_logRatio_centrality_etendue(correct_strength_median(df_snp))
-		wgtsGenotypes,meansGenotypes,countGenotypes,pvar = getParamsFromDatas(df_corrected,genotypes)
+		wgtsGenotypes,meansGenotypes,countGenotypes,pvar = getParamsFromDatas(df_snp,genotypes)
 		new_priors = redefinePriors(df_corrected,float(maf))
 		
-		df_corrected = df_corrected.reset_index()
-		listADN = getADN103(df_corrected)
+		df_snp = df_snp.reset_index()
+		listADN = getADN103(df_snp)
 		
-		GaussianMixture(df_corrected,wgtsGenotypes,meansGenotypes,genotypes,snp,listADN,maf,new_priors,pvar)
+		GaussianMixture(df_snp,wgtsGenotypes,meansGenotypes,genotypes,snp,listADN,maf,new_priors,pvar)
 		
 		#bar.finish()
 
