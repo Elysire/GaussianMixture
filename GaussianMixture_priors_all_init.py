@@ -9,13 +9,12 @@ Description:
 	snp in 3 genotypes.
 
 Usage:
-    GaussianMixture.py --snpList=File --callingRAC=File --annotFile=File
+    GaussianMixture.py --snpList=File --callingRAC=File
 
 Options:
     -h --help     Show help.
     snpList		list snp txt
     callingRAC		results snp
-    annotFile		annotation file
 
 """
 
@@ -38,6 +37,7 @@ from time import sleep
 from hmmlearn import hmm
 pd.set_option('chained',None) #pour eviter le warning sur les copies de dataframe
 
+
 ################ IMPORT DATAS #################
 def importDatas(fileToImport): # import file in dataframe and add header, chose wich one 
 	# import datas as dataframe with pandas
@@ -46,16 +46,20 @@ def importDatas(fileToImport): # import file in dataframe and add header, chose 
 	#df.columns = ['Plate','Sample','ProbeSetName','Call','Confidence','Log Ratio','Strength','Forced Call'] #Mettre en commentaire si pas de header
 	df.columns = ['Plate','snp','Sample','ProbeSetName','Call','Confidence','Log Ratio','Strength','Forced Call']
 	return df
-def import_list_snp(listSNP):
-	list_snp = []
-	with open(listSNP,'r') as f:
-		for snp in f.readlines():
-			snp = snp.replace("\n","")
-			list_snp.append(snp)
-	return list_snp
 def degPlatesFromSNP(df,name_snp): # split dataframe by snp 
 	table_snp = df.loc[df.snp==name_snp]
 	return table_snp
+def import_list_snp(listSNP):
+    list_snp = []
+    with open(listSNP,'r') as f:
+        for snp in f.readlines():
+            snp = snp.replace("\n","")
+            list_snp.append(snp)
+    return list_snp
+def getMAF(fileAllMAF,name_snp):
+	dfMAF = pd.read_csv(fileAllMAF)
+	MAFsnp = dfMAF.loc[dfMAF.snp==name_snp]['maf'].item()
+	return float(MAFsnp)
 
 ############## HOMOGENEIZATION PLATES (CORRECTION) #############
 def quartile_subset(logratios,lower,upper): # avoid outliers 
@@ -104,16 +108,16 @@ def getParamsFromDatas(df_corrected, genotypes): # Get weigths for each genotype
 		wgt = nbGeno/len(df) #count genotype i (AA or AB or BB) normalize with len
 		wgts.append(wgt)
 		#### !!!!!!!!!!!  choose "Log Ratio" or "CorrectedLogRatio"
-		meanLog = (df[df.Forced_Call==i].mean()["Log Ratio"])
-		#meanLog = (df[df.Forced_Call==i].mean()["CorrectedLogRatio"]) #mean of logRatio for genotype i
+		#meanLog = (df[df.Forced_Call==i].mean()["Log Ratio"])
+		meanLog = (df[df.Forced_Call==i].mean()["CorrectedLogRatio"]) #mean of logRatio for genotype i
 		meansCouple.append(meanLog)
 		#### !!!!!!!!!!!  choose "Strength" or "CorrectedStrength"
-		meanStrength = (df[df.Forced_Call==i].mean()["Strength"])
-		#meanStrength = (df[df.Forced_Call==i].mean()["CorrectedStrength"]) #mean of Strength for genotype i
+		#meanStrength = (df[df.Forced_Call==i].mean()["Strength"])
+		meanStrength = (df[df.Forced_Call==i].mean()["CorrectedStrength"]) #mean of Strength for genotype i
 		meansCouple.append(meanStrength)
 		means.append(meansCouple)
-		pvar=np.var(df["Strength"])
-		#pvar=np.var(df["CorrectedStrength"])
+		#pvar=np.var(df["Strength"])
+		pvar=np.var(df["CorrectedStrength"])
 	wgts = np.asarray(wgts)
 	means_array = np.asarray(means)
 	return wgts, means_array, countGeno, pvar
@@ -148,16 +152,6 @@ def scoreHomoAfterGM(results,ADN103):
 			clust3+=1
 	score = max(clust1,clust2,clust3) / len(ADN103)
 	return score
-def getMAF_for_snp(filepath,name_snp): # get MAF for each snp 
-	df = pd.read_csv(filepath,sep=',',header=19,low_memory=False)
-	if df[df['dbSNP RS ID']==name_snp]['Minor Allele Frequency'].any():
-		line = df[df['dbSNP RS ID']==name_snp]['Minor Allele Frequency']
-		line = line.str.split("/")
-		allele_frequency=line.iloc[0][0]
-		return allele_frequency
-	else:
-		allele_frequency="snp not in anotation file"
-	return allele_frequency
 def effectifs(results):
 	nbAA=0
 	nbAB=0
@@ -228,19 +222,17 @@ def plot_results(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,m
 
 ############### GAUSSIAN MIXTURE #############
 def GaussianMixture(df,wgts,means,genotypes,name_snp,index_ADN_103,maf,priors,pvar): # do the GM with EM algorithm and output results 
-	datas = df[['Log Ratio','Strength']].as_matrix()
-	#datas = df[['CorrectedLogRatio','CorrectedStrength']].as_matrix()
+	#datas = df[['Log Ratio','Strength']].as_matrix()
+	datas = df[['CorrectedLogRatio','CorrectedStrength']].as_matrix()
 	precisions = np.diag([pvar]*2)
 	maf = float(maf)
 	freqBB = maf**2
 	freqAB = 2 * maf * (1 - maf)
 	freqAA = (1-maf)**2
 	weigths_theo = np.asarray([freqAA,freqAB,freqBB])
-	print(weigths_theo)
 	gm = mixture.GaussianMixture(n_components=3, covariance_type="tied",weights_init=weigths_theo,means_init=means,precisions_init=precisions,random_state=0, max_iter=200, verbose=0, warm_start=False).fit(datas)
 	
 	resultatsGM = gm.predict(datas)
-	print(resultatsGM)
 	probasGM = gm.predict_proba(datas)
 	cov_res = gm.covariances_
 	if len(cov_res) < 3:
@@ -375,7 +367,7 @@ def generateMultivarie(freq_allelique,n,size,df): # generate multivarie for simu
 ############## REDEFINE PRIORS ##############
 def redefinePriors(df_snp,maf): # define priors from maf to re genotype after 
 	N = len(df_snp)
-	
+
 	nbBB = N * (maf**2)
 	nbAB = 2 * N * maf * (1 - maf)
 	nbAA = N * ((1-maf)**2)
@@ -414,51 +406,30 @@ def main():
 	listSNP = import_list_snp(args['--snpList'])
 
 	#listSNP = ['rs7074353']
-	#sizeListSNP = [0:len(listSNP)]
-	#bar = progressbar.ProgressBar(maxval=20,widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
-	#for i,(snp,n) in enumerate(zip(listSNP,sizeListSNP)): # split dataframe by snp
-	
-	with open("/home/e062531t/Bureau/Sidwell/datas/list_maf.txt",'r') as f:
-		list_maf_snp=[]
-		for line in f.readlines():
-			couple_snp_maf=[]
-			line = line.replace("\n","")
-			line = line.split("\t")
-			name_snp = line[0]
-			maf = line[1]
-			couple_snp_maf.append(name_snp)
-			couple_snp_maf.append(maf)
-			list_maf_snp.append(couple_snp_maf)
-
 
 	for snp in listSNP:
-		print(snp)
-		#bar.update(n+1)
-		#sleep(0.1)
-
-		maf = getMAF_for_snp(args['--annotFile'],snp)
-
-		for i in list_maf_snp:
-			if i[0] == snp:
-				maf = i[1]
-
+		
 		df_snp = degPlatesFromSNP(AllDatas,snp)
 		df_corrected = correct_logRatio_centrality_etendue(correct_strength_median(df_snp))
-		wgtsGenotypes,meansGenotypes,countGenotypes,pvar = getParamsFromDatas(df_snp,genotypes)
-		new_priors = redefinePriors(df_corrected,float(maf))
+		wgtsGenotypes,meansGenotypes,countGenotypes,pvar = getParamsFromDatas(df_corrected,genotypes)
+
+		try:
+			maf = getMAF("all_maf_4_GM.txt",snp)
+		except FileNotFoundError:
+			print("Run getMAF.py first to get MAF from annotation file")
+			break	
+
+		print(snp)
+		new_priors = redefinePriors(df_corrected,maf)
 		
-		df_snp = df_snp.reset_index()
-		listADN = getADN103(df_snp)
+		df_corrected = df_corrected.reset_index()
+		listADN = getADN103(df_corrected)
 		
-		GaussianMixture(df_snp,wgtsGenotypes,meansGenotypes,genotypes,snp,listADN,maf,new_priors,pvar)
-		
-		#bar.finish()
+		GaussianMixture(df_corrected,wgtsGenotypes,meansGenotypes,genotypes,snp,listADN,maf,new_priors,pvar)
 
 		#plotByPlate(df_snp,wgtsGenotypes,meansGenotypes,genotypes,snp)
 	
-
 	#generateMultivarie(0.27,96,1,AllDatas)
-	#hardyWeinberg(AllDatas,wgtsGenotypes,countGenotypes)
 
 
 ###### correction : modify GaussianMixture, GetParamsFromDatas, redefinePriors, main ###########
