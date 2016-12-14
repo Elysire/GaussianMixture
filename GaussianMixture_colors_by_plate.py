@@ -51,19 +51,19 @@ def importDatas(fileToImport): # import file in dataframe and add header, chose 
 def degPlatesFromSNP(df,name_snp): # split dataframe by snp 
 	table_snp = df.loc[df.snp==name_snp]
 	return table_snp
-def import_list_snp(listSNP):
+def import_list_snp(listSNP): # import a list with snp names like "rs...." (file.txt) 
     list_snp = []
     with open(listSNP,'r') as f:
         for snp in f.readlines():
             snp = snp.replace("\n","")
             list_snp.append(snp)
-    return list_snp
-def getMAF(fileAllMAF,name_snp):
+    return list_snp 
+def getMAF(fileAllMAF,name_snp): # get the MAF from file created by "getMAF.py" -> get MAF from annote files 
 	dfMAF = pd.read_csv(fileAllMAF)
 	MAFsnp = dfMAF.loc[dfMAF.snp==name_snp]['maf'].item()
 	alleleMAF = dfMAF.loc[dfMAF.snp==name_snp]['allele'].item()
 	MAF_allele = [MAFsnp,alleleMAF]
-	return MAF_allele
+	return MAF_allele 
 
 ############## HOMOGENEIZATION PLATES (CORRECTION) #############
 def quartile_subset(logratios,lower,upper): # avoid outliers 
@@ -77,7 +77,30 @@ def correct_logRatio_centrality_etendue(df): # correct log ratio by centrality a
 	df['m1'] = df.groupby('Plate')['Log Ratio'].transform(lambda s: quartile_subset(s,0.20,0.80).mean())
 	df['m2'] = df.groupby('Plate')['Log Ratio'].transform(lambda s: quartile_subset(s,0.25,0.75).mean())
 	df['m3'] = df.groupby('Plate')['Log Ratio'].transform(lambda s: quartile_subset(s,0.30,0.70).mean())
-	df['M'] = (df['m1'] + df['m2'] + df['m3'])/3
+	
+	"""
+	expreg = "ADN103_RAC."
+	ADN103 = df[df['Sample'].str.contains(expreg, regex=True)]
+	logRatio_ADN103 = ADN103['Log Ratio']
+	for name, group in df.groupby('Plate'):
+		ADN103=group[group['Sample'].str.contains(expreg, regex=True)]
+		df['ADN103'] = ADN103['Log Ratio']
+		m = df['ADN103'].mean()
+		for i in df['ADN103']:
+			i=str(i)
+			if i!="nan":
+				value = i
+		print(value)
+		df['ADN103_bis']=""
+		df['ADN103_bis'][df['Plate']==name] = value
+		print(df['ADN103_bis'])
+	df['ADN103_bis'] = df.groupby('Plate')[ADN103['Log Ratio']]
+	print(df['ADN103_bis'])
+	df['ADN103_bis'] = df.apply(lambda row: m[row['Plate']] if pd.isnull(row['ADN103']) else row['ADN103'])
+	print(df['ADN103_bis'])
+	"""
+
+	df['M'] = (df['m1'] + df['m2'] + df['m3'])/3		
 	df['CorrectedLogRatio_centrality'] = df['Log Ratio'] - df['M']
 	df['Ei'] = df.groupby('Plate')['Log Ratio'].transform(lambda i: (dist_inter_quantile(i,0.20,0.80)+dist_inter_quantile(i,0.25,0.75)+dist_inter_quantile(i,0.30,0.70))/3)
 	maxEI = df['Ei'].max()
@@ -134,7 +157,7 @@ def scoreHomoAfterGM(results,ADN103): # score de test avec les ADN103 pour voir 
 			clust3+=1
 	score = max(clust1,clust2,clust3) / len(ADN103)
 	return score
-def effectifs(results):
+def effectifs(results): # get observed effectives of each genotype after GM by prediction 
 	nbAA=0
 	nbAB=0
 	nbBB=0
@@ -147,18 +170,18 @@ def effectifs(results):
 			nbBB+=1
 	effectifsAfterGM = [nbAA,nbAB,nbBB]
 	return effectifsAfterGM
-def getMAFobs(effectifs_predicted):
+def getMAFobs(effectifs_predicted): # calcul MAF observed with effectifs predicted 
 	freq_A = ((2 * effectifs_predicted[0]) + effectifs_predicted[1]) / (2 * (sum(effectifs_predicted)))
 	freq_B = ((2 * effectifs_predicted[2]) + effectifs_predicted[1]) / (2 * (sum(effectifs_predicted)))
 	if freq_A < freq_B:
 		mafOBS = [freq_A,'A']
 	else :
 		mafOBS = [freq_B,'B']
-	return mafOBS
-def getIndicePlateFromSNP(df):
+	return mafOBS # return the smaller frequence = MAF
+def getIndicePlateFromSNP(df): # get indices of plates by SNP
 	listIndicesAllPlates = []
-	df = df.reset_index()
-	for name,group in df.groupby("Plate"):
+	df = df.reset_index() # reset index in a snp to have the same if GM later
+	for name,group in df.groupby("Plate"): 
 		sousListe = []
 		sousListe.append(name)
 		sousListe.append(group.index.tolist())
@@ -189,94 +212,126 @@ def writeMeans(FileOut,means,genotypes): # write a file with means for each geno
 		for j in mean:
 			fichier.write(str(j)+"\t")
 		fichier.write("\n")
-def plot_results(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates): # plot results on graph 
+def plot_results_by_plate(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates): # plot results on graph 
     colors_genotypes = ['pink' if i==0 else 'skyblue' if i==1 else 'lightgreen' for i in resultGM]
     markers_genotypes = ['s' if i==0 else 'o' if i==1 else 'D' for i in resultGM]
     plt.clf()
     ax=plt.gca()
     for i, x, y, c, m in zip(range(len(datas)),datas[:,0], datas[:,1], colors_genotypes, markers_genotypes):
     	if i in listIndicesAllPlates[0][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="aliceblue",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="aliceblue",marker=m, label="RAC1") # if indice is in the list of indices of plate 1 : set the color of the plate
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="aliceblue", s=100)		
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="aliceblue", s=100, label="RAC1") # and if it is also ADN103 : set a special marker with the color of the plate		
     	if i in listIndicesAllPlates[1][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="red",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="red",marker=m, label="RAC10")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="red", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="red", s=100, label="RAC10")
     	if i in listIndicesAllPlates[2][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="blue",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="blue",marker=m, label="RAC11-PVM1")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="blue", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="blue", s=100, label="RAC11-PVM1")
     	if i in listIndicesAllPlates[3][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="green",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="green",marker=m, label="RAC12")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="green", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="green", s=100, label="RAC12")
     	if i in listIndicesAllPlates[4][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="yellow",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="yellow",marker=m, label="RAC13")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="yellow", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="yellow", s=100, label="RAC13")
     	if i in listIndicesAllPlates[5][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="purple",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="purple",marker=m, label="RAC14")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="purple", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="purple", s=100, label="RAC14")
     	if i in listIndicesAllPlates[6][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="orange",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="orange",marker=m, label="RAC15")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="orange", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="orange", s=100, label="RAC15")
     	if i in listIndicesAllPlates[7][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="white",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="white",marker=m, label="RAC2")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="white", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="white", s=100, label="RAC2")
     	if i in listIndicesAllPlates[8][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="black",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="black",marker=m, label="RAC3")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="black", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="black", s=100, label="RAC3")
     	if i in listIndicesAllPlates[9][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="antiquewhite",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="antiquewhite",marker=m, label="RAC4")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="antiquewhite", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="antiquewhite", s=100, label="RAC4")
     	if i in listIndicesAllPlates[10][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="beige",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="beige",marker=m, label="RAC5")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="beige", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="beige", s=100, label="RAC5")
     	if i in listIndicesAllPlates[11][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="bisque",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="bisque",marker=m, label="RAC6")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="bisque", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="bisque", s=100, label="RAC6")
     	if i in listIndicesAllPlates[12][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="blueviolet",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="blueviolet",marker=m, label="RAC7")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="blueviolet", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="blueviolet", s=100, label="RAC7")
     	if i in listIndicesAllPlates[13][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="brown",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="brown",marker=m, label="RAC8")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="brown", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="brown", s=100, label="RAC8")
     	if i in listIndicesAllPlates[14][1]:
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="chartreuse",marker=m)
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c="chartreuse",marker=m, label="RAC9")
     		if i in index_ADN_103:
-    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="chartreuse", s=100)
+    			ax.scatter(datas[i,0], datas[i,1], alpha=1, marker="*",c="chartreuse", s=100, label="RAC9")
     	
     plt.title("Calling "+name_snp)
     plt.xlabel('LogRatio')
     plt.ylabel('Strength')
     nbgenos = effectifs(resultGM)
+    #plt.legend(loc = 'upper right')
     plt.text(0.015, 0.98,"Score homogeneite = "+str(score),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     plt.text(0.015, 0.95,"MAF_theo = "+str(maf[0])+"  allele:"+str(maf[1]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     plt.text(0.015, 0.92,"HB = "+str(HB),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     plt.text(0.015, 0.89,"MAF_obs = "+str(MAF_obs[0])+"  allele:"+str(MAF_obs[1]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     plt.text(0.015, 0.86,"NbAA:"+str(nbgenos[0])+"  nbAB:"+str(nbgenos[1])+"  nbBB:"+str(nbgenos[2]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     #plt.show()
-    plt.savefig(str(name_snp)+"_gm_co_corrected_by_plate.png")
-def plot_results_by_plate(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates): # plot results on graph 
+    plt.savefig(str(name_snp)+"_gm_corrected_priors_by_plate.png")
+def plot_results(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs): # plot results on graph 
+    colors_genotypes = ['pink' if i==0 else 'skyblue' if i==1 else 'lightgreen' for i in resultGM]
+    plt.clf()
+    for i in range(len(means)):
+    	ax=plt.gca()
+    	ax.scatter(datas[:,0], datas[:,1], alpha=0.8, c=colors_genotypes)	
+    	for j in index_ADN_103:
+    		ax.scatter(datas[j,0], datas[j,1], alpha=1, c="black")
+
+    plt.title("Calling "+name_snp)
+    plt.xlabel('LogRatio')
+    plt.ylabel('Strength')
+    nbgenos = effectifs(resultGM)
+    #plt.legend(loc = 'upper right')
+    plt.text(0.015, 0.98,"Score homogeneite = "+str(score),fontsize=8, ha='left', va='center', transform=ax.transAxes)
+    plt.text(0.015, 0.95,"MAF_theo = "+str(maf[0])+"  allele:"+str(maf[1]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
+    plt.text(0.015, 0.92,"HB = "+str(HB),fontsize=8, ha='left', va='center', transform=ax.transAxes)
+    plt.text(0.015, 0.89,"MAF_obs = "+str(MAF_obs[0])+"  allele:"+str(MAF_obs[1]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
+    plt.text(0.015, 0.86,"NbAA:"+str(nbgenos[0])+"  nbAB:"+str(nbgenos[1])+"  nbBB:"+str(nbgenos[2]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
+    #plt.show()
+    plt.savefig(str(name_snp)+"_gm_corrected.png")
+def plot_results_by_plate_short(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates, df): # plot results on graph 
     colors_genotypes = ['pink' if i==0 else 'skyblue' if i==1 else 'lightgreen' for i in resultGM]
     markers_genotypes = ['s' if i==0 else 'o' if i==1 else 'D' for i in resultGM]
+    print(markers_genotypes)
     colours = ["aliceblue", "red", "blue", "green", "yellow", "purple", "orange", "white", "black","antiquewhite","beige","bisque","blueviolet","brown","chartreuse"]
     plt.clf()
     ax=plt.gca()
-    for m, z, c in zip(markers_genotypes, listIndicesAllPlates, colours): 	
-    	for i in z[1]:
-    		print(m,i,c)
-    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c=c, marker=m)	  	
+    for (name, group), c in zip(df.groupby('Plate'), colours):
+    	data = group[['CorrectedLogRatio','CorrectedStrength']]
+    	#print(name)
+    	indexPlate = data.index.tolist()
+    	for i, m in zip(indexPlate, markers_genotypes):
+    		ax.scatter(datas[i,0], datas[i,1], alpha=0.8, c=c, marker=m)
+    	"""for x, y, m, in zip(data[:,0], data[:,1], markers_genotypes):
+    		print(x,y,m)
+    		ax.scatter(x, y, alpha=0.8, c=c, marker=m)"""
+    	"""for (index,row), m in zip(data.iterrows(), markers_genotypes):
+    		print (row[0],row[1], c, m)
+    		ax.scatter(row[0], row[1], alpha=0.8, c=c, marker=m)"""
+	  	
     plt.title("Calling "+name_snp)
     plt.xlabel('LogRatio')
     plt.ylabel('Strength')
@@ -287,7 +342,7 @@ def plot_results_by_plate(datas,resultGM,means,covariances,name_snp,index_ADN_10
     plt.text(0.015, 0.89,"MAF_obs = "+str(MAF_obs[0])+"  allele:"+str(MAF_obs[1]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     plt.text(0.015, 0.86,"NbAA:"+str(nbgenos[0])+"  nbAB:"+str(nbgenos[1])+"  nbBB:"+str(nbgenos[2]),fontsize=8, ha='left', va='center', transform=ax.transAxes)
     #plt.show()
-    #plt.savefig(str(name_snp)+"_gm_priors_corrected_by_plate.png")
+    plt.savefig(str(name_snp)+"_gm_priors_corrected_by_plate.png")
 def plot_results_with_ellipses(datas,resultGM,means,covariances,name_snp,index_ADN_103,score,maf,HB,MAF_obs): # plot results on graph 
     colors_genotypes = ['pink' if i==0 else 'skyblue' if i==1 else 'lightgreen' for i in resultGM]
     markers_genotypes = ['x','o','D']
@@ -356,8 +411,9 @@ def GaussianMixture(df,wgts,means,genotypes,name_snp,index_ADN_103,maf,priors,pv
 	score = scoreHomoAfterGM(resultatsGM,index_ADN_103)
 	effectifs_after_GM = effectifs(resultatsGM)
 	MAF_obs = getMAFobs(effectifs_after_GM)
-	HB = hardyWeinberg(len(df),effectifs_after_GM,maf)
-	plot_results(datas,resultatsGM,means_res, cov_res,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates)
+	HB = hardyWeinberg(len(df),effectifs_after_GM,maf,MAF_obs)
+	plot_results(datas,resultatsGM,means_res, cov_res,name_snp,index_ADN_103,score,maf,HB,MAF_obs)
+	#plot_results_by_plate(datas,resultatsGM,means_res,cov_res,name_snp,index_ADN_103,score,maf,HB,MAF_obs,listIndicesAllPlates,df)
 	#probas = writeProbasConfidence(df,"/home/e062531t/Bureau/Sidwell/res/probas_confidence_genotypes.txt", probasGM)
 	#writeCov("/home/e062531t/Bureau/Sidwell/res/cov_gm.txt",cov_res) 
 	#writeMeans("/home/e062531t/Bureau/Sidwell/res/means_gm.txt",means_res, genotypes)
@@ -384,13 +440,15 @@ def plotByPlate(datas,wgts,means,genotypes,name_snp): # plot results GM by plate
 	#plt.show()
 
 ################## HARDY WEINBERG #################
-def hardyWeinberg(N,effectifs,maf): # return a chi2 
+def hardyWeinberg(N,effectifs,maf,maf_obs): # return a chi2 
 	maf = float(maf[0])
-	theo_eff_BB = N * (maf**2)
-	theo_eff_AB = 2 * N * maf * (1 - maf)
-	theo_eff_AA = N * ((1-maf)**2)
-	theo_effectifs = [theo_eff_AA, theo_eff_AB, theo_eff_BB]
-	pval = (scipy.stats.chisquare(effectifs, f_exp=theo_effectifs)[1])
+	maf_obs = maf_obs[0]
+	theo_eff_homo_variant = N * (maf_obs**2)
+	theo_eff_AB = 2 * N * maf_obs * (1 - maf_obs)
+	theo_eff_homo_ref = N * ((1-maf_obs)**2)
+	theo_effectifs = [theo_eff_homo_ref, theo_eff_AB, theo_eff_homo_variant]
+	chi2 = (((theo_eff_homo_ref-effectifs[0])**2)/effectifs[0])+(((theo_eff_AB-effectifs[1])**2)/effectifs[1])+(((theo_eff_homo_variant-effectifs[2])**2)/effectifs[2])
+	pval = (scipy.stats.chisquare(effectifs, f_exp=theo_effectifs, ddof=1)[1])
 	return pval
 
 ################ SIMULATIONS ################
@@ -442,7 +500,7 @@ def redefinePriors(df_snp,maf): # define priors from maf to re genotype after
 		nbAA = int(nbAA)
 		nbBB = N * ((1-maf_num)**2)
 		nbBB = int(nbBB)
-		df_snp = df_snp.sort_values(['CorrectedLogRatio'],ascending=True)
+		df_snp = df_snp.sort_values(['CorrectedLogRatio'],ascending=True) # small values on top
 		new_priorBB_log = df_snp.iloc[int((0+nbBB)/2)]['CorrectedLogRatio']
 		priorBB_strength = df_snp.iloc[int((0+nbBB)/2)]['CorrectedStrength']
 		b = int(nbAA/2)
@@ -450,15 +508,15 @@ def redefinePriors(df_snp,maf): # define priors from maf to re genotype after
 		priorAA_strength = df_snp.iloc[nbBB+nbAB+b]['CorrectedStrength']
 
 	if maf[1] == 'B':
-		df_snp = df_snp.sort_values(['CorrectedLogRatio'],ascending=False)
+		df_snp = df_snp.sort_values(['CorrectedLogRatio'],ascending=False) # high values on top
 		nbBB = N * (maf_num**2)
 		nbBB = int(nbBB)
 		nbAA = N * ((1-maf_num)**2)
 		nbAA = int(nbAA)
-		new_priorAA_log = df_snp.iloc[int((0+nbAA)/2)]['CorrectedLogRatio']
+		new_priorAA_log = df_snp.iloc[int((0+nbAA)/2)]['CorrectedLogRatio'] # parmi le nombre theorique de AA : prend le point avec un logRatio median
 		priorAA_strength = df_snp.iloc[int((0+nbAA)/2)]['CorrectedStrength']
 		b = int(nbBB/2)
-		new_priorBB_log = df_snp.iloc[nbAA+nbAB+b]['CorrectedLogRatio']
+		new_priorBB_log = df_snp.iloc[nbAA+nbAB+b]['CorrectedLogRatio'] # parmi le nombre theorique de BB (on ajoute le nb de AA et de BB pour arriver a lindice)
 		priorBB_strength = df_snp.iloc[nbAA+nbAB+b]['CorrectedStrength']
 
 	a = int(nbAB/2)
@@ -481,6 +539,7 @@ def main():
 	listSNP = import_list_snp(args['--snpList'])
 
 	#listSNP = ['rs7074353']
+	#listSNP = ['rs35386136']
 
 	for snp in listSNP:
 		df_snp = degPlatesFromSNP(AllDatas,snp)
